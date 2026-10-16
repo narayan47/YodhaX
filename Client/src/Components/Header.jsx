@@ -109,21 +109,13 @@ const Header = () => {
               </NavLink>
             ))}
 
-            <Link
-              to="/sign-in"
-              onClick={() => setIsMenuOpen(false)}
-              className="mt-2 rounded-lg border border-slate-200 px-3 py-3 text-center font-medium text-slate-700"
-            >
-              Sign in
-            </Link>
-
-            <Link
-              to="/sign-up"
-              onClick={() => setIsMenuOpen(false)}
-              className="rounded-lg bg-blue-600 px-3 py-3 text-center font-semibold text-white hover:bg-blue-700"
-            >
-              Get Started
-            </Link>
+           <Show when="signed-out">
+          <SignInButton />
+          <SignUpButton />
+        </Show>
+        <Show when="signed-in">
+          <UserButton />
+        </Show>
           </div>
         </div>
       )}

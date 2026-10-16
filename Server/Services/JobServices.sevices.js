@@ -1,4 +1,8 @@
 
+import { translateJobDescription } from "./JobDescriptionService.js";
+
+import { cleanJobDescription } from "./JobDescriptionService.js";
+
 const ARBEITNOW_API_URL =
   "https://www.arbeitnow.com/api/job-board-api";
 
@@ -11,16 +15,18 @@ export const fetchRecentJobs = async () => {
 
   const result = await response.json();
 
-  return (result.data || []).map((job) => ({
+  const jobs = (result.data || []).map((job) => ({
     externalId: job.slug,
     title: job.title,
     company: job.company_name,
     location: job.location,
-    description: job.description,
+    description: cleanJobDescription(job.description),
     url: job.url,
     postedAt: job.created_at,
     remote: job.remote,
     tags: job.tags || [],
     source: "Arbeitnow",
   }));
+
+  return translateJobDescription(jobs);
 };

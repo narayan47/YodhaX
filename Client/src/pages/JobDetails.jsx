@@ -36,51 +36,52 @@ export default function JobDetails() {
 
   const [job, setJob] = useState(location.state?.job || null);
   const [loading, setLoading] = useState(!location.state?.job);
+  const [translationError, setTranslationError] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (job) return;
-
     let cancelled = false;
+    const originalJob = location.state?.job || null;
 
-    async function loadJob() {
+    async function loadTranslatedJob() {
       try {
-        setLoading(true);
+        if (!originalJob) setLoading(true);
         setError("");
+        setTranslationError("");
 
-        const response = await axios.get(`${API_URL}/api/jobs/recent`);
-        const jobs = response.data?.data || [];
-
-        const selectedJob = jobs.find((item) => {
-          const id = item.externalId || item.url;
-
-          return id === jobId || encodeURIComponent(id || "") === jobId;
-        });
-
-        if (!selectedJob) {
-          throw new Error(
-            "This job was not found in the currently available listings."
-          );
+        const response = await axios.get(
+          `${API_URL}/api/jobs/recent/${encodeURIComponent(jobId)}/description`
+        );
+        if (!response.data?.success || !response.data.data) {
+          throw new Error("Unable to load the translated job description.");
         }
-
-        if (!cancelled) setJob(selectedJob);
+        if (!cancelled) setJob(response.data.data);
       } catch (err) {
         if (!cancelled) {
-          setError(
-            err.message || "Unable to load job details. Please try again."
-          );
+          if (originalJob) {
+            setJob(originalJob);
+            setTranslationError(
+              "Translation is unavailable right now; showing the original description."
+            );
+          } else {
+            setError(
+              err.response?.data?.message ||
+                err.message ||
+                "Unable to load job details. Please try again."
+            );
+          }
         }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    loadJob();
+    loadTranslatedJob();
 
     return () => {
       cancelled = true;
     };
-  }, [jobId, job]);
+  }, [jobId, location.state?.job]);
 
   if (loading) {
     return (
@@ -173,12 +174,15 @@ export default function JobDetails() {
               Job description
             </h2>
 
-            <div
-              className="prose prose-slate mt-4 max-w-none break-words text-slate-600"
-              dangerouslySetInnerHTML={{
-                __html: job.description || "No description available.",
-              }}
-            />
+            {translationError && (
+              <p className="mt-3 text-sm text-amber-700" role="status">
+                {translationError}
+              </p>
+            )}
+
+            <div className="mt-4 whitespace-pre-wrap break-words text-slate-600">
+              {job.description || "No description available."}
+            </div>
           </div>
 
           <div className="mt-9 rounded-xl bg-slate-50 p-5">
