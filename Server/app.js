@@ -1,63 +1,71 @@
 
-import express from "express";
-import cors from "cors";
 import "dotenv/config";
-import connectDB from "./config/db.js";
+import express from "express";
+import mongoose from "mongoose";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+import authRoutes from "./Router/authRoutes.js";
 import jobRoutes from "./Router/JobRoutes.js";
+import connectDB from "./config/db.js";
+
 const app = express();
+const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const CLIENT_URL =
+  process.env.CLIENT_URL || "http://localhost:5173";
 
-// Root route
-app.get("/", (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Welcome to Placement Hub API",
-  });
+app.disable("x-powered-by");
+
+// CORS must run before your routes.
+app.use(
+  cors({
+    origin: CLIENT_URL,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+app.use(express.json({ limit: "10kb" }));
+app.use(cookieParser());
+
+app.get("/api/health", (req, res) => {
+  res.json({ success: true, message: "Verifhir API is running" });
 });
 
+app.use("/api/auth", authRoutes);
 app.use("/api/jobs", jobRoutes);
-
 
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: `Route ${req.method} ${req.originalUrl} not found`,
+    message: "Route not found",
   });
 });
 
-// Global error handler
 app.use((err, req, res, next) => {
-  console.error("Server error:", err);
-
+  console.error(err);
   res.status(err.status || 500).json({
     success: false,
-    message:
-      err.status && err.status < 500
-        ? err.message
-        : "Internal server error",
+    message: "Internal server error",
   });
 });
 
-// Connect to MongoDB, then start the server
-const PORT = process.env.PORT || 5000;
-
-const startServer = async () => {
+async function startServer() {
   try {
+   
+
     await connectDB();
 
     app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
+      console.log(`Server running at http://localhost:${PORT}`);
+      console.log(`Allowed frontend origin: ${CLIENT_URL}`);
     });
   } catch (error) {
-    console.error("Server startup failed:", error.message);
+    console.error("Failed to start server:", error.message);
     process.exit(1);
   }
-};
+}
 
 startServer();
 
-export default app;

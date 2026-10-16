@@ -1,6 +1,7 @@
 
 import { useState } from "react";
 import { FaGithub } from "react-icons/fa";
+import {Link} from "react-router-dom";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -418,17 +419,17 @@ function Home() {
           </nav>
 
           <div className="hidden items-center gap-3 md:flex">
-            <button
+            <Link
+            to="/login"
               type="button"
-              onClick={showNotice}
               className="px-3 py-2 text-sm text-slate-300 hover:text-white"
             >
               Log in
-            </button>
+            </Link>
 
-            <Button onClick={showNotice}>
+            <Link to="/signup">
               Get early access <ArrowRight size={15} />
-            </Button>
+            </Link>
           </div>
 
           <button
