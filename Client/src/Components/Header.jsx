@@ -7,6 +7,7 @@ import {
   X,
   UserRound,
 } from "lucide-react";
+import { Show, SignInButton, SignUpButton, UserButton } from '@clerk/react'
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -28,7 +29,7 @@ const Header = () => {
 
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900">
-              Placement <span className="text-blue-600">Hub</span>
+              Verif<span className="text-blue-600">Hire</span>
             </h1>
             <p className="text-xs text-slate-500">
               Your career starts here
