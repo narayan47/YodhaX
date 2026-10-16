@@ -1,126 +1,255 @@
 
 import { useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
-  BriefcaseBusiness,
   Menu,
+  ShieldCheck,
+  LayoutDashboard,
+  LogOut,
+  ChevronDown,
   X,
-  UserRound,
 } from "lucide-react";
-import { Show, SignInButton, SignUpButton, UserButton } from '@clerk/react'
+import { useAuth } from "../context/AuthContext";
 
-const Header = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+const dashboardPaths = {
+  student: "/student/dashboard",
+  recruiter: "/recruiter/dashboard",
+  placementcell: "/placement/dashboard",
+};
 
-  const navLinks = [
-    { name: "Home", path: "/" },
-    { name: "Find Jobs", path: "/jobs" },
-    { name: "My Applications", path: "/applications" },
-  ];
+const homeLinks = [
+  ["How it works", "/#how-it-works"],
+  ["For students", "/#students"],
+  ["For recruiters", "/#recruiters"],
+  ["About", "/#about"],
+];
+
+export default function Header() {
+  const { user, logout, authLoading } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isHomePage = location.pathname === "/";
+
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const dashboardPath = user
+    ? dashboardPaths[user.role]
+    : null;
+
+  const closeMobileMenu = () => setMobileOpen(false);
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+
+    setLoggingOut(true);
+
+    try {
+      await logout();
+      navigate("/login", { replace: true });
+    } catch (error) {
+      navigate("/login", { replace: true });
+    } finally {
+      setLoggingOut(false);
+      closeMobileMenu();
+    }
+  };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur-md">
-      <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white">
-            <BriefcaseBusiness size={24} />
-          </div>
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#09090f]/90 text-white backdrop-blur-xl">
+      <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between px-4 sm:px-7">
+        <Link
+          to="/"
+          onClick={closeMobileMenu}
+          className="flex items-center gap-2.5"
+        >
+          <span className="rounded-xl bg-violet-500/15 p-2 text-violet-300">
+            <ShieldCheck size={22} />
+          </span>
 
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">
-              Verif<span className="text-blue-600">Hire</span>
-            </h1>
-            <p className="text-xs text-slate-500">
-              Your career starts here
-            </p>
-          </div>
+          <span className="text-xl font-semibold tracking-tight">
+            verifhir<span className="text-violet-400">.</span>
+          </span>
         </Link>
 
-        {/* Desktop navigation */}
-        <div className="hidden items-center gap-8 md:flex">
-          {navLinks.map((link) => (
-            <NavLink
-              key={link.path}
-              to={link.path}
-              end={link.path === "/"}
-              className={({ isActive }) =>
-                `text-sm font-medium transition ${
-                  isActive
-                    ? "text-blue-600"
-                    : "text-slate-600 hover:text-blue-600"
-                }`
-              }
+        {!authLoading && (
+          <>
+            {/* Desktop navigation */}
+            <nav className="hidden items-center gap-7 text-sm text-slate-400 md:flex">
+              {!user ? (
+                isHomePage ? (
+                  homeLinks.map(([label, href]) => (
+                    <a
+                      key={label}
+                      href={href}
+                      className="transition hover:text-white"
+                    >
+                      {label}
+                    </a>
+                  ))
+                ) : (
+                  <Link to="/" className="hover:text-white">
+                    Home
+                  </Link>
+                )
+              ) : (
+                <Link
+                  to={dashboardPath || "/"}
+                  className="flex items-center gap-2 hover:text-white"
+                >
+                  <LayoutDashboard size={16} />
+                  Dashboard
+                </Link>
+              )}
+            </nav>
+
+            {/* Desktop actions */}
+            <div className="hidden items-center gap-3 md:flex">
+              {!user ? (
+                <>
+                  <Link
+                    to="/login"
+                    className="rounded-xl px-4 py-2.5 text-sm text-slate-300 hover:text-white"
+                  >
+                    Log in
+                  </Link>
+
+                  <Link
+                    to="/signup"
+                    className="rounded-xl bg-violet-500 px-5 py-2.5 text-sm font-semibold hover:bg-violet-400"
+                  >
+                    Get started
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to={dashboardPath || "/"}
+                    className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm hover:bg-white/10"
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-400/15 text-xs font-semibold text-violet-200">
+                      {user.name?.charAt(0)?.toUpperCase() || "U"}
+                    </span>
+
+                    <span className="max-w-32 truncate">
+                      {user.name || "My account"}
+                    </span>
+
+                    <ChevronDown size={15} />
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    disabled={loggingOut}
+                    className="flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm text-slate-300 hover:border-red-400/30 hover:text-red-300 disabled:opacity-50"
+                  >
+                    <LogOut size={16} />
+                    {loggingOut ? "Logging out..." : "Log out"}
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Mobile menu button */}
+            <button
+              type="button"
+              onClick={() => setMobileOpen((open) => !open)}
+              className="rounded-lg border border-white/10 p-2 md:hidden"
+              aria-label={mobileOpen ? "Close menu" : "Open menu"}
+              aria-expanded={mobileOpen}
             >
-              {link.name}
-            </NavLink>
-          ))}
-        </div>
-
-        {/* Actions */}
-        <div className="hidden items-center gap-3 md:flex">
-          <Link
-            to="/sign-in"
-            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-          >
-            <UserRound size={18} />
-            Sign in
-          </Link>
-
-          <Link
-            to="/sign-up"
-            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-          >
-            Get Started
-          </Link>
-        </div>
-
-        {/* Mobile menu button */}
-        <button
-          type="button"
-          onClick={() => setIsMenuOpen(!isMenuOpen)}
-          aria-label={isMenuOpen ? "Close menu" : "Open menu"}
-          aria-expanded={isMenuOpen}
-          className="rounded-lg p-2 text-slate-700 hover:bg-slate-100 md:hidden"
-        >
-          {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
-      </nav>
+              {mobileOpen ? <X size={21} /> : <Menu size={21} />}
+            </button>
+          </>
+        )}
+      </div>
 
       {/* Mobile navigation */}
-      {isMenuOpen && (
-        <div className="border-t border-slate-200 bg-white px-4 py-4 md:hidden">
-          <div className="flex flex-col gap-1">
-            {navLinks.map((link) => (
-              <NavLink
-                key={link.path}
-                to={link.path}
-                end={link.path === "/"}
-                onClick={() => setIsMenuOpen(false)}
-                className={({ isActive }) =>
-                  `rounded-lg px-3 py-3 text-sm font-medium ${
-                    isActive
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-slate-700 hover:bg-slate-50"
-                  }`
-                }
-              >
-                {link.name}
-              </NavLink>
-            ))}
+      {mobileOpen && !authLoading && (
+        <div className="border-t border-white/10 bg-[#0d0d15] p-4 md:hidden">
+          <nav className="flex flex-col gap-2">
+            {!user ? (
+              <>
+                {isHomePage ? (
+                  homeLinks.map(([label, href]) => (
+                    <a
+                      key={label}
+                      href={href}
+                      onClick={closeMobileMenu}
+                      className="rounded-lg px-3 py-3 text-sm text-slate-300 hover:bg-white/5"
+                    >
+                      {label}
+                    </a>
+                  ))
+                ) : (
+                  <Link
+                    to="/"
+                    onClick={closeMobileMenu}
+                    className="rounded-lg px-3 py-3 text-sm text-slate-300 hover:bg-white/5"
+                  >
+                    Home
+                  </Link>
+                )}
 
-           <Show when="signed-out">
-          <SignInButton />
-          <SignUpButton />
-        </Show>
-        <Show when="signed-in">
-          <UserButton />
-        </Show>
-          </div>
+                <Link
+                  to="/login"
+                  onClick={closeMobileMenu}
+                  className="rounded-lg px-3 py-3 text-sm text-slate-300 hover:bg-white/5"
+                >
+                  Log in
+                </Link>
+
+                <Link
+                  to="/signup"
+                  onClick={closeMobileMenu}
+                  className="rounded-lg bg-violet-500 px-3 py-3 text-sm font-semibold"
+                >
+                  Get started
+                </Link>
+              </>
+            ) : (
+              <>
+                <div className="px-3 py-2">
+                  <p className="font-medium">
+                    {user.name || "My account"}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    {user.role === "student"
+                      ? "Student / Jobseeker"
+                      : user.role === "recruiter"
+                        ? "Recruiter"
+                        : user.role === "placementcell"
+                          ? "Placement cell"
+                          : user.role}
+                  </p>
+                </div>
+
+                <Link
+                  to={dashboardPath || "/"}
+                  onClick={closeMobileMenu}
+                  className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm hover:bg-white/5"
+                >
+                  <LayoutDashboard size={17} />
+                  Dashboard
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                  className="flex items-center gap-3 rounded-lg px-3 py-3 text-left text-sm text-red-300 hover:bg-red-400/5 disabled:opacity-50"
+                >
+                  <LogOut size={17} />
+                  {loggingOut ? "Logging out..." : "Log out"}
+                </button>
+              </>
+            )}
+          </nav>
         </div>
       )}
     </header>
   );
-};
-
-export default Header;
+}

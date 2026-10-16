@@ -1,13 +1,17 @@
+import { Router } from "express";
 
-import express from "express";
 import {
   getRecentJobs,
   getTranslatedJobDescription,
 } from "../Controller/JobController.js";
 
-const router = express.Router();
+const router = Router();
 
 router.get("/recent", getRecentJobs);
-router.get("/recent/:jobId/description", getTranslatedJobDescription);
+
+router.get(
+  "/recent/:jobId/description",
+  getTranslatedJobDescription
+);
 
 export default router;

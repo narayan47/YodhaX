@@ -1,7 +1,7 @@
-
 import { useState } from "react";
 import { FaGithub } from "react-icons/fa";
-import {Link} from "react-router-dom";
+import { Link } from "react-router-dom";
+import Header from "./Header";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -11,12 +11,10 @@ import {
   Code2,
   FileCheck2,
   GraduationCap,
-  Menu,
   ShieldCheck,
   Sparkles,
   Target,
   Users,
-  X,
   Zap,
   CircleCheck,
 } from "lucide-react";
@@ -63,13 +61,6 @@ const evidence = [
     description: "JavaScript fundamentals",
     status: "Passed · 88%",
   },
-];
-
-const navLinks = [
-  ["How it works", "#how-it-works"],
-  ["For students", "#students"],
-  ["For recruiters", "#recruiters"],
-  ["About", "#about"],
 ];
 
 const steps = [
@@ -261,6 +252,7 @@ function DashboardPreview() {
               <h3 className="text-sm font-semibold">
                 Verified skill profile
               </h3>
+
               <p className="mt-1 text-xs text-slate-500">
                 Evidence-linked portfolio
               </p>
@@ -309,9 +301,11 @@ function DashboardPreview() {
                 <p className="text-xs text-slate-400">
                   Evidence score
                 </p>
+
                 <p className="mt-1 text-sm font-semibold text-teal-300">
                   Profile overview
                 </p>
+
                 <p className="mt-1 text-xs text-slate-500">
                   Illustrative data
                 </p>
@@ -344,6 +338,7 @@ function DashboardPreview() {
               <p className="text-xs text-slate-400">
                 Evidence sources
               </p>
+
               <p className="mt-1 text-lg font-bold">
                 {evidence.length}
                 <span className="text-xs font-normal text-slate-500">
@@ -379,7 +374,6 @@ function DashboardPreview() {
 /* -------------------- MAIN HOME PAGE -------------------- */
 
 function Home() {
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [notice, setNotice] = useState("");
 
   const showNotice = () => {
@@ -392,82 +386,8 @@ function Home() {
 
   return (
     <div className="min-h-screen overflow-hidden bg-[#080910] text-white selection:bg-violet-400/30">
-      {/* NAVBAR */}
-
-      <header className="sticky top-0 z-50 border-b border-white/[0.07] bg-[#080910]/85 backdrop-blur-xl">
-        <div className="mx-auto flex h-[76px] max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-12">
-          <a href="#" className="flex items-center gap-2.5">
-            <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-violet-400 to-indigo-600">
-              <ShieldCheck size={20} />
-            </div>
-
-            <span className="text-xl font-bold tracking-tight">
-              verifhir<span className="text-violet-400">.</span>
-            </span>
-          </a>
-
-          <nav className="hidden items-center gap-8 md:flex">
-            {navLinks.map(([label, href]) => (
-              <a
-                key={label}
-                href={href}
-                className="text-sm text-slate-400 transition hover:text-white"
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
-
-          <div className="hidden items-center gap-3 md:flex">
-            <Link
-            to="/login"
-              type="button"
-              className="px-3 py-2 text-sm text-slate-300 hover:text-white"
-            >
-              Log in
-            </Link>
-
-            <Link to="/signup">
-              Get early access <ArrowRight size={15} />
-            </Link>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="grid h-10 w-10 place-items-center rounded-lg border border-white/10 md:hidden"
-            aria-label="Toggle navigation"
-            aria-expanded={mobileOpen}
-          >
-            {mobileOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
-        </div>
-
-        {mobileOpen && (
-          <div className="border-t border-white/10 bg-[#0b0c14] px-5 py-4 md:hidden">
-            <nav className="flex flex-col gap-1">
-              {navLinks.map(([label, href]) => (
-                <a
-                  key={label}
-                  href={href}
-                  onClick={() => setMobileOpen(false)}
-                  className="rounded-lg px-3 py-3 text-sm text-slate-300 hover:bg-white/5"
-                >
-                  {label}
-                </a>
-              ))}
-
-              <Button
-                onClick={showNotice}
-                className="mt-2 w-full"
-              >
-                Get early access <ArrowRight size={15} />
-              </Button>
-            </nav>
-          </div>
-        )}
-      </header>
-
+      {/* Shared Header is rendered by your application layout. */}
+        <Header/>
       <main>
         {/* HERO */}
 
@@ -531,6 +451,7 @@ function Home() {
               <p className="text-sm font-semibold text-slate-300">
                 For the next generation of talent
               </p>
+
               <p className="mt-1 text-xs text-slate-500">
                 And the teams ready to discover it.
               </p>
@@ -570,6 +491,7 @@ function Home() {
                   <h3 className="text-sm font-semibold">
                     {item.title}
                   </h3>
+
                   <p className="mt-1 text-sm text-slate-500">
                     {item.description}
                   </p>
@@ -666,6 +588,7 @@ function Home() {
                     <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-teal-300/10 text-teal-300">
                       <Check size={12} />
                     </span>
+
                     {benefit}
                   </li>
                 ))}
@@ -682,6 +605,7 @@ function Home() {
                   <h3 className="text-sm font-semibold">
                     Your evidence, organized
                   </h3>
+
                   <p className="mt-1 text-xs text-slate-500">
                     Example profile overview
                   </p>
@@ -709,6 +633,7 @@ function Home() {
                         <p className="text-sm font-medium">
                           {item.title}
                         </p>
+
                         <p className="mt-1 truncate text-xs text-slate-500">
                           {item.description}
                         </p>
@@ -842,7 +767,7 @@ function Home() {
 
       <footer className="border-t border-white/[0.08]">
         <div className="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-8 sm:px-8 md:flex-row md:items-center md:justify-between lg:px-12">
-          <a href="#" className="flex items-center gap-2.5">
+          <Link to="/" className="flex items-center gap-2.5">
             <div className="grid h-8 w-8 place-items-center rounded-lg bg-violet-500/15 text-violet-300">
               <ShieldCheck size={17} />
             </div>
@@ -850,23 +775,25 @@ function Home() {
             <span className="font-bold tracking-tight">
               verifhir<span className="text-violet-400">.</span>
             </span>
-          </a>
+          </Link>
 
           <p className="text-xs text-slate-600">
             Skills, verified. Built for evidence-led hiring.
           </p>
 
           <div className="flex gap-5 text-xs text-slate-500">
-            <a href="#about" className="hover:text-white">
+            <a href="/#about" className="hover:text-white">
               About
             </a>
+
             <a
               href="mailto:hello@verifhir.com"
               className="hover:text-white"
             >
               Contact
             </a>
-            <a href="#about" className="hover:text-white">
+
+            <a href="/#about" className="hover:text-white">
               Privacy
             </a>
           </div>

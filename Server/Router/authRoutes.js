@@ -1,4 +1,3 @@
-
 import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import bcrypt from "bcryptjs";
@@ -14,7 +13,7 @@ const router = Router();
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
-  standardHeaders: "draft-8",
+  standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
@@ -25,13 +24,15 @@ const authLimiter = rateLimit({
 const verificationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 5,
-  standardHeaders: "draft-8",
+  standardHeaders: true,
   legacyHeaders: false,
 });
 
 const cookieOptions = () => ({
   httpOnly: true,
-  secure: process.env.COOKIE_SECURE === "true",
+  secure:
+    process.env.COOKIE_SECURE === "true" ||
+    process.env.NODE_ENV === "production",
   sameSite: process.env.COOKIE_SAME_SITE || "lax",
   path: "/",
   maxAge: 24 * 60 * 60 * 1000,
@@ -49,6 +50,10 @@ function createVerificationToken() {
 }
 
 function createJwt(user) {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET is not configured.");
+  }
+
   return jwt.sign(
     {
       sub: user._id.toString(),
@@ -72,16 +77,30 @@ function publicUser(user) {
 }
 
 function setAuthCookie(res, user) {
-  const token = createJwt(user);
+  res.cookie("token", createJwt(user), cookieOptions());
+}
 
-  res.cookie("token", token, cookieOptions());
+function clearAuthCookie(res) {
+  const options = cookieOptions();
+
+  res.clearCookie("token", {
+    httpOnly: options.httpOnly,
+    secure: options.secure,
+    sameSite: options.sameSite,
+    path: options.path,
+  });
 }
 
 /* ---------------- SIGNUP ---------------- */
 
 router.post("/signup", authLimiter, async (req, res) => {
   try {
-    const { name, email, password, role = "student" } = req.body;
+    const {
+      name,
+      email,
+      password,
+      role = "student",
+    } = req.body || {};
 
     if (
       typeof name !== "string" ||
@@ -97,7 +116,10 @@ router.post("/signup", authLimiter, async (req, res) => {
     const cleanName = name.trim();
     const cleanEmail = email.trim().toLowerCase();
 
-    if (cleanName.length < 2 || cleanName.length > 80) {
+    if (
+      cleanName.length < 2 ||
+      cleanName.length > 80
+    ) {
       return res.status(400).json({
         success: false,
         message: "Name must be between 2 and 80 characters.",
@@ -111,69 +133,85 @@ router.post("/signup", authLimiter, async (req, res) => {
       });
     }
 
-    if (password.length < 8 || password.length > 72) {
+    if (
+      password.length < 8 ||
+      Buffer.byteLength(password, "utf8") > 72
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Password must be between 8 and 72 characters.",
+        message:
+          "Password must be at least 8 characters and no more than 72 bytes.",
       });
     }
 
-    if (!["student", "recruiter", "placementcell"].includes(role)) {
+    if (
+      !["student", "recruiter", "placementcell"].includes(role)
+    ) {
       return res.status(400).json({
         success: false,
         message: "Select a valid account role.",
       });
     }
 
-    const existingUser = await User.findOne({
+    if (!process.env.JWT_SECRET) {
+      return res.status(503).json({
+        success: false,
+        message: "Authentication is not configured.",
+      });
+    }
+
+    const existing = await User.findOne({
       email: cleanEmail,
     });
 
-    if (existingUser) {
+    if (existing) {
       return res.status(409).json({
         success: false,
-        message: existingUser.isEmailVerified
+        message: existing.isEmailVerified
           ? "An account with this email already exists."
           : "An account exists but is not verified. Request a new verification email.",
-        code: existingUser.isEmailVerified
+        code: existing.isEmailVerified
           ? "EMAIL_EXISTS"
           : "EMAIL_UNVERIFIED",
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
-    const { rawToken, hashedToken } = createVerificationToken();
+    const { rawToken, hashedToken } =
+      createVerificationToken();
 
     const user = await User.create({
       name: cleanName,
       email: cleanEmail,
-      password: hashedPassword,
+      password: await bcrypt.hash(password, 12),
       role,
       isEmailVerified: false,
       emailVerificationToken: hashedToken,
-      emailVerificationExpires: new Date(Date.now() + 15 * 60 * 1000),
+      emailVerificationExpires: new Date(
+        Date.now() + 15 * 60 * 1000
+      ),
     });
 
     try {
       await sendVerificationEmail(user.email, rawToken);
     } catch (emailError) {
-      // Do not leave an unusable account if email delivery fails.
       await User.deleteOne({ _id: user._id });
 
-      console.error("Verification email failed:", emailError.message);
-      console.error("Error code:", emailError.code);
-  console.error("SMTP response:", emailError.response);
-
+      console.error(
+        "Verification email failed:",
+        emailError.message
+      );
 
       return res.status(502).json({
         success: false,
-        message: "We could not send the verification email. Please try again.",
+        message:
+          "We could not send the verification email. Please try again.",
       });
     }
 
     return res.status(201).json({
       success: true,
-      message: "Account created. Check your email to verify your account.",
+      message:
+        "Account created. Check your email to verify your account.",
       requiresEmailVerification: true,
     });
   } catch (error) {
@@ -200,7 +238,7 @@ router.post(
   verificationLimiter,
   async (req, res) => {
     try {
-      const { token } = req.body;
+      const { token } = req.body || {};
 
       if (typeof token !== "string" || !token) {
         return res.status(400).json({
@@ -218,12 +256,15 @@ router.post(
         emailVerificationToken: hashedToken,
         emailVerificationExpires: { $gt: new Date() },
         isEmailVerified: false,
-      }).select("+emailVerificationToken +emailVerificationExpires");
+      }).select(
+        "+emailVerificationToken +emailVerificationExpires"
+      );
 
       if (!user) {
         return res.status(400).json({
           success: false,
-          message: "This verification link is invalid, expired, or already used.",
+          message:
+            "This verification link is invalid, expired, or already used.",
         });
       }
 
@@ -235,10 +276,14 @@ router.post(
 
       return res.status(200).json({
         success: true,
-        message: "Email verified successfully. You can now log in.",
+        message:
+          "Email verified successfully. You can now log in.",
       });
     } catch (error) {
-      console.error("Email verification error:", error.message);
+      console.error(
+        "Email verification error:",
+        error.message
+      );
 
       return res.status(500).json({
         success: false,
@@ -256,7 +301,7 @@ router.post(
   async (req, res) => {
     try {
       const email =
-        typeof req.body.email === "string"
+        typeof req.body?.email === "string"
           ? req.body.email.trim().toLowerCase()
           : "";
 
@@ -267,22 +312,22 @@ router.post(
         });
       }
 
-      const user = await User.findOne({ email }).select(
-        "+emailVerificationToken +emailVerificationExpires"
-      );
-
-      // Avoid revealing whether an email belongs to an account.
-      const genericResponse = {
+      const generic = {
         success: true,
         message:
           "If an unverified account exists, a verification email will be sent.",
       };
 
+      const user = await User.findOne({ email }).select(
+        "+emailVerificationToken +emailVerificationExpires"
+      );
+
       if (!user || user.isEmailVerified) {
-        return res.status(200).json(genericResponse);
+        return res.status(200).json(generic);
       }
 
-      const { rawToken, hashedToken } = createVerificationToken();
+      const { rawToken, hashedToken } =
+        createVerificationToken();
 
       user.emailVerificationToken = hashedToken;
       user.emailVerificationExpires = new Date(
@@ -294,17 +339,24 @@ router.post(
       try {
         await sendVerificationEmail(user.email, rawToken);
       } catch (error) {
-        console.error("Resend email failed:", error.message);
+        console.error(
+          "Resend email failed:",
+          error.message
+        );
 
         return res.status(502).json({
           success: false,
-          message: "Unable to send email right now. Please try later.",
+          message:
+            "Unable to send email right now. Please try later.",
         });
       }
 
-      return res.status(200).json(genericResponse);
+      return res.status(200).json(generic);
     } catch (error) {
-      console.error("Resend verification error:", error.message);
+      console.error(
+        "Resend verification error:",
+        error.message
+      );
 
       return res.status(500).json({
         success: false,
@@ -318,7 +370,7 @@ router.post(
 
 router.post("/login", authLimiter, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
 
     if (
       typeof email !== "string" ||
@@ -330,25 +382,14 @@ router.post("/login", authLimiter, async (req, res) => {
       });
     }
 
-    const cleanEmail = email.trim().toLowerCase();
-
     const user = await User.findOne({
-      email: cleanEmail,
+      email: email.trim().toLowerCase(),
     }).select("+password");
 
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password.",
-      });
-    }
-
-    const passwordMatches = await bcrypt.compare(
-      password,
-      user.password
-    );
-
-    if (!passwordMatches) {
+    if (
+      !user ||
+      !(await bcrypt.compare(password, user.password))
+    ) {
       return res.status(401).json({
         success: false,
         message: "Invalid email or password.",
@@ -387,7 +428,7 @@ router.get("/me", protect, async (req, res) => {
     const user = await User.findById(req.user.id);
 
     if (!user || !user.isEmailVerified) {
-      res.clearCookie("token", cookieOptions());
+      clearAuthCookie(res);
 
       return res.status(401).json({
         success: false,
@@ -411,8 +452,8 @@ router.get("/me", protect, async (req, res) => {
 
 /* ---------------- LOGOUT ---------------- */
 
-router.post("/logout", (req, res) => {
-  res.clearCookie("token", cookieOptions());
+router.post("/logout", (_req, res) => {
+  clearAuthCookie(res);
 
   return res.status(200).json({
     success: true,
