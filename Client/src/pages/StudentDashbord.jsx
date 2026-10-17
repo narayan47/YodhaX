@@ -775,7 +775,20 @@ export default function StudentDashboard() {
 
     try {
 
-      const { data } = await api.put("/resume/profile", resume);
+    const email = (resume.email || user?.email || "").trim();
+
+if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  showMessage(
+    "Please enter a valid email in Personal details before saving.",
+    "error"
+  );
+  return;
+}
+
+const { data } = await api.put("/resume/profile", {
+  ...resume,
+  email,
+});
 
       setResume({
 

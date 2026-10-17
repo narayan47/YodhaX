@@ -1,9 +1,7 @@
+
 import { Router } from "express";
 import multer from "multer";
 import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
-const pdf = require("pdf-parse");
 import mammoth from "mammoth";
 
 import Resume from "../Model/Resume.js";
@@ -13,12 +11,16 @@ import {
   requireRole,
 } from "../Middleware/auth.js";
 
+const require = createRequire(import.meta.url);
+const pdf = require("pdf-parse");
+
 const router = Router();
 
-router.use(
-  requireAuth,
-  requireRole("student")
-);
+router.use(requireAuth, requireRole("student"));
+
+// --------------------------------------------------
+// Multer configuration
+// --------------------------------------------------
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -29,8 +31,9 @@ const upload = multer({
   },
 
   fileFilter: (_req, file, cb) => {
-    const extensionValid =
-      /\.(pdf|docx)$/i.test(file.originalname || "");
+    const extensionValid = /\.(pdf|docx)$/i.test(
+      file.originalname || ""
+    );
 
     const mimeValid = [
       "application/pdf",
@@ -38,18 +41,18 @@ const upload = multer({
     ].includes(file.mimetype);
 
     if (!extensionValid || !mimeValid) {
-      const error = new Error(
-        "Upload a PDF or DOCX file."
-      );
-
+      const error = new Error("Upload a PDF or DOCX file.");
       error.status = 400;
-
       return cb(error);
     }
 
     return cb(null, true);
   },
 });
+
+// --------------------------------------------------
+// GET or create resume profile
+// --------------------------------------------------
 
 async function getOrCreateResume(user) {
   return Resume.findOneAndUpdate(
@@ -63,21 +66,22 @@ async function getOrCreateResume(user) {
       },
     },
 
-   {
-  returnDocument: "after",
-  upsert: true,
-  setDefaultsOnInsert: true,
-  runValidators: true,
-}
+    {
+      returnDocument: "after",
+      upsert: true,
+      setDefaultsOnInsert: true,
+      runValidators: true,
+    }
   );
 }
 
+// --------------------------------------------------
 // GET /api/resume/profile
+// --------------------------------------------------
+
 router.get("/profile", async (req, res, next) => {
   try {
-    const profile = await getOrCreateResume(
-      req.user
-    );
+    const profile = await getOrCreateResume(req.user);
 
     return res.json({
       success: true,
@@ -88,7 +92,10 @@ router.get("/profile", async (req, res, next) => {
   }
 });
 
+// --------------------------------------------------
 // PUT /api/resume/profile
+// --------------------------------------------------
+
 router.put("/profile", async (req, res, next) => {
   try {
     const fields = [
@@ -110,13 +117,16 @@ router.put("/profile", async (req, res, next) => {
 
     const update = {};
 
+    // Only accept explicitly allowed fields.
     for (const field of fields) {
-      if (
-        Object.hasOwn(req.body || {}, field)
-      ) {
+      if (Object.hasOwn(req.body || {}, field)) {
         update[field] = req.body[field];
       }
     }
+
+    // ----------------------------------------------
+    // Validate array fields
+    // ----------------------------------------------
 
     const arrayFields = [
       "education",
@@ -138,6 +148,25 @@ router.put("/profile", async (req, res, next) => {
       }
     }
 
+    // ----------------------------------------------
+    // Validate full name
+    // ----------------------------------------------
+
+    if (update.fullName !== undefined) {
+      if (typeof update.fullName !== "string") {
+        return res.status(400).json({
+          success: false,
+          message: "Full name must be a string.",
+        });
+      }
+
+      update.fullName = update.fullName.trim();
+    }
+
+    // ----------------------------------------------
+    // Validate email
+    // ----------------------------------------------
+
     if (update.email !== undefined) {
       if (
         typeof update.email !== "string" ||
@@ -154,39 +183,112 @@ router.put("/profile", async (req, res, next) => {
       update.email = update.email.trim().toLowerCase();
     }
 
+    // ----------------------------------------------
+    // Prevent conflicting MongoDB update operators
+    // ----------------------------------------------
+
+    // Remove fields from $set when they are already being
+    // initialized by $setOnInsert.
+    //
+    // $setOnInsert supplies initial values only when a
+    // profile is first created. Existing profiles can
+    // update fullName and email normally.
+
+    const insertFields = {
+      user: req.user._id,
+      fullName: req.user.name || "",
+      email: req.user.email || "",
+    };
+
+    const setOnInsert = {
+      user: req.user._id,
+    };
+
+    // On insertion, prefer the submitted values if provided.
+    setOnInsert.fullName =
+      update.fullName !== undefined
+        ? update.fullName
+        : insertFields.fullName;
+
+    setOnInsert.email =
+      update.email !== undefined
+        ? update.email
+        : insertFields.email;
+
+    // Do not update fullName/email through both operators.
+    const setFields = { ...update };
+
+    delete setFields.fullName;
+    delete setFields.email;
+
     const profile = await Resume.findOneAndUpdate(
       { user: req.user._id },
 
       {
-        $set: update,
-
-        $setOnInsert: {
-          user: req.user._id,
-          fullName: req.user.name || "",
-          email: req.user.email || "",
-        },
+        $set: setFields,
+        $setOnInsert: setOnInsert,
       },
 
       {
-        new: true,
+        returnDocument: "after",
         upsert: true,
         runValidators: true,
         setDefaultsOnInsert: true,
       }
     );
 
+    // If the profile already existed, update these fields
+    // separately in the same update operation without
+    // creating conflicting paths.
+    //
+    // Use an update pipeline to choose initial values only
+    // for a newly inserted document would be more complex.
+    // Instead, the profile is initialized first below when
+    // necessary, then the submitted values are saved.
+
+    // For an existing profile, apply fullName/email updates.
+    const hasNameOrEmail =
+      update.fullName !== undefined ||
+      update.email !== undefined;
+
+    let finalProfile = profile;
+
+    if (hasNameOrEmail) {
+      const followUpUpdate = {};
+
+      if (update.fullName !== undefined) {
+        followUpUpdate.fullName = update.fullName;
+      }
+
+      if (update.email !== undefined) {
+        followUpUpdate.email = update.email;
+      }
+
+      finalProfile = await Resume.findOneAndUpdate(
+        { user: req.user._id },
+        { $set: followUpUpdate },
+        {
+          returnDocument: "after",
+          runValidators: true,
+        }
+      );
+    }
+
     return res.json({
       success: true,
       message: "Resume saved.",
-      profile,
+      profile: finalProfile,
     });
   } catch (error) {
     return next(error);
   }
 });
 
+// --------------------------------------------------
 // POST /api/resume/upload
 // Multipart field name: resume
+// --------------------------------------------------
+
 router.post(
   "/upload",
 
@@ -213,7 +315,6 @@ router.post(
 
       if (req.file.mimetype === "application/pdf") {
         const parsed = await pdf(req.file.buffer);
-
         extractedText = parsed.text || "";
       } else {
         const parsed = await mammoth.extractRawText({
