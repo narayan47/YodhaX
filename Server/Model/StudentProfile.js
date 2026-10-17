@@ -9,37 +9,63 @@ const evidenceSchema = new mongoose.Schema(
         "github_repository",
         "assessment",
         "project",
-        "manual"
+        "manual",
       ],
-      default: "manual"
+      default: "manual",
     },
 
     description: {
       type: String,
       trim: true,
-      maxlength: 500
+      maxlength: 500,
     },
 
     url: {
       type: String,
       trim: true,
-      maxlength: 1000
+      maxlength: 1000,
     },
 
     repository: {
       type: String,
-      trim: true
+      trim: true,
     },
 
-    detectedSkills: [{
-      type: String,
-      trim: true
-    }],
+    detectedSkills: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+
+    // Supports the latest assessment result.
+    score: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: null,
+    },
 
     createdAt: {
       type: Date,
-      default: Date.now
-    }
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
+const repositorySchema = new mongoose.Schema(
+  {
+    name: String,
+    url: String,
+    language: String,
+
+    stars: {
+      type: Number,
+      default: 0,
+    },
+
+    description: String,
   },
   { _id: false }
 );
@@ -50,40 +76,48 @@ const skillSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
-      maxlength: 60
+      maxlength: 60,
     },
 
+    // Final score used by your existing StudentDashboard.
     score: {
       type: Number,
       min: 0,
       max: 100,
-      default: 0
+      default: 0,
+    },
+
+    // Latest score calculated from current GitHub analysis.
+    githubScore: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: null,
+    },
+
+    // Latest server-evaluated MCQ result.
+    assessmentScore: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: null,
+    },
+
+    assessmentTakenAt: {
+      type: Date,
+      default: null,
     },
 
     evidenceCount: {
       type: Number,
       min: 0,
-      default: 0
+      default: 0,
     },
 
     evidence: {
       type: [evidenceSchema],
-      default: []
-    }
-  },
-  { _id: false }
-);
-
-const repositorySchema = new mongoose.Schema(
-  {
-    name: String,
-    url: String,
-    language: String,
-    stars: {
-      type: Number,
-      default: 0
+      default: [],
     },
-    description: String
   },
   { _id: false }
 );
@@ -95,50 +129,50 @@ const studentProfileSchema = new mongoose.Schema(
       ref: "User",
       required: true,
       unique: true,
-      index: true
+      index: true,
     },
 
     skills: {
       type: [skillSchema],
-      default: []
+      default: [],
     },
 
     githubUsername: {
       type: String,
-      trim: true
+      trim: true,
     },
 
     githubUrl: {
       type: String,
-      trim: true
+      trim: true,
     },
 
     githubVerifiedAt: {
       type: Date,
-      default: null
+      default: null,
     },
 
     githubSummary: {
       publicRepos: {
         type: Number,
-        default: 0
+        default: 0,
       },
 
       totalStars: {
         type: Number,
-        default: 0
+        default: 0,
       },
 
       overallEvidenceScore: {
         type: Number,
-        default: 0
+        default: 0,
       },
 
       repositories: {
         type: [repositorySchema],
-        default: []
-      }
-    }
+        default: [],
+      },
+    },
   },
   { timestamps: true }
 );

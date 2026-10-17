@@ -11,8 +11,11 @@ import Home from "./Components/Home";
 import AuthPage from "./pages/AuthPage";
 import VerifyEmail from "./pages/VerifyEmail";
 import ProtectedRoute from "./Components/ProtectedRoute";
+import PlacementDashboard from "./pages/PlacementDashboard";
+import ApplicationPipeline from "./pages/ApplicationPipeline";
 
 import "./App.css";
+import StudentSkillAssessment from "./Components/Student/StudentSkillAssessment";
 
 function App() {
   return (
@@ -41,6 +44,22 @@ function App() {
             path="/verify-email"
             element={<VerifyEmail />}
           />
+          <Route
+  path="/placement/dashboard"
+  element={
+    <ProtectedRoute allowedRoles={["placementcell"]}>
+      <PlacementDashboard />
+    </ProtectedRoute>
+  }
+/>
+  <Route
+  path="/student/SkillAssessment"
+  element={
+    <ProtectedRoute allowedRoles={["student"]}>
+      <StudentSkillAssessment />
+    </ProtectedRoute>
+  }
+/>
 
           {/* Student protected routes */}
           <Route
@@ -48,11 +67,29 @@ function App() {
               <ProtectedRoute allowedRoles={["student"]} />
             }
           >
+
             <Route
               path="/student/dashboard"
               element={<StudentDashbord />}
             />
           </Route>
+          <Route
+  path="/student/applications"
+  element={
+    <ProtectedRoute allowedRoles={["student"]}>
+      <ApplicationPipeline />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/placement/applications"
+  element={
+    <ProtectedRoute allowedRoles={["placementcell"]}>
+      <ApplicationPipeline />
+    </ProtectedRoute>
+  }
+/>
         </Routes>
       </AuthProvider>
     </BrowserRouter>

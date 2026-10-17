@@ -12,6 +12,10 @@ import resumeRoutes from "./Router/resume.routes.js";
 import jobRoutes from "./Router/job.routes.js";
 import jobSyncRoutes from "./Router/job-sync.routes.js";
 import recentJobRoutes from "./Router/JobRoutes.js";
+import placementRoutes from "./Router/placement.routes.js";
+import applicationRoutes from "./Router/application.routes.js";
+import joblitingRoutes from "./Router/jobliting.router.js";
+import skillAssessmentRoutes from "./Router/skill-assessment.routes.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5000;
@@ -70,12 +74,7 @@ app.use(
 
 app.use(cookieParser());
 
-app.get("/health", (_req, res) => {
-  return res.json({
-    success: true,
-    status: "ok",
-  });
-});
+app.use("/api/jobs", joblitingRoutes);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/student", studentRoutes);
@@ -83,6 +82,11 @@ app.use("/api/resume", resumeRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/jobs/sync", jobSyncRoutes);
 app.use("/api/arbeitnow", recentJobRoutes);
+app.use("/api", placementRoutes);
+app.use("/api", applicationRoutes);
+app.use("/api/placement", placementRoutes);
+app.use("/api/student", skillAssessmentRoutes);
+
 
 app.use((req, res) => {
   return res.status(404).json({

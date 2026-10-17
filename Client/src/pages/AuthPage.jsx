@@ -224,7 +224,7 @@ function AuthPage() {
           </span>
 
           <span>
-            verifhir<span className="auth-brand-dot">.</span>
+            verifhire<span className="auth-brand-dot">.</span>
           </span>
         </Link>
 
@@ -545,14 +545,14 @@ function AuthPage() {
                 <>
                   {isSignup
                     ? "Create my account"
-                    : "Log in to Verifhir"}
+                    : "Log in to Verifhire"}
                   <ArrowRight size={17} />
                 </>
               )}
             </button>
 
             <p className="auth-terms">
-              By continuing, you agree to use Verifhir responsibly
+              By continuing, you agree to use Verifhire responsibly
               and provide accurate account information.
             </p>
           </form>
@@ -571,7 +571,7 @@ function AuthPage() {
 
       {/* Footer */}
       <footer className="auth-footer">
-        <span>© {new Date().getFullYear()} Verifhir</span>
+        <span>© {new Date().getFullYear()} Verifhire</span>
         <span>Skills, verified.</span>
       </footer>
     </main>

@@ -11,6 +11,7 @@ const dashboardPaths = {
 
 export default function ProtectedRoute({
   allowedRoles = [],
+  children,
 }) {
   const { user, authLoading } = useAuth();
   const location = useLocation();
@@ -35,23 +36,22 @@ export default function ProtectedRoute({
 
   const userRole = user.role?.toLowerCase();
 
-  const normalizedAllowedRoles = allowedRoles.map(
-    (role) => role.toLowerCase()
+  const normalizedAllowedRoles = allowedRoles.map((role) =>
+    role.toLowerCase()
   );
 
   if (
     normalizedAllowedRoles.length > 0 &&
     !normalizedAllowedRoles.includes(userRole)
   ) {
-    const destination = dashboardPaths[userRole];
-
     return (
       <Navigate
-        to={destination || "/unauthorized"}
+        to={dashboardPaths[userRole] || "/"}
         replace
       />
     );
   }
 
-  return <Outlet />;
+  // Supports both direct children and nested routes.
+  return children ?? <Outlet />;
 }
