@@ -430,84 +430,252 @@ export default function StudentDashboard() {
 
   // ---------------- Job Matching ----------------
 
-  const loadJobs = useCallback(async (page = 1) => {
+  
+  // ---------------- Job Matching ----------------
 
-    setJobsLoading(true);
+  const normalizeSkill = (value = "") =>
+    String(value)
+      .toLowerCase()
+      .replace(/\.js\b/g, "js")
+      .replace(/[^a-z0-9+#.]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
 
-    setJobsError("");
+  const getJobMatch = (job, studentSkills) => {
+    const userSkills = studentSkills
+      .map((skill) => ({
+        name: typeof skill === "string" ? skill : skill.name,
+        score:
+          typeof skill === "string"
+            ? 0
+            : Number(skill.score) || 0,
+        evidenceCount:
+          typeof skill === "string"
+            ? 0
+            : Number(skill.evidenceCount) || 0,
+      }))
+      .filter((skill) => skill.name);
 
-    try {
+    const requiredSkills = [
+      ...(Array.isArray(job.requiredSkills)
+        ? job.requiredSkills
+        : []),
+      ...(Array.isArray(job.tags) ? job.tags : []),
+    ]
+      .map((skill) =>
+        typeof skill === "string"
+          ? skill
+          : skill?.name || ""
+      )
+      .filter(Boolean);
 
-      const { data } = await api.get("/jobs/matches", {
+    const uniqueRequired = [
+      ...new Map(
+        requiredSkills.map((skill) => [
+          normalizeSkill(skill),
+          skill,
+        ])
+      ).values(),
+    ];
 
-        params: { page },
+    const searchableText = normalizeSkill(
+      [
+        job.title,
+        job.description,
+        job.company,
+        ...(job.tags || []),
+        ...(job.requiredSkills || []),
+      ]
+        .map((item) =>
+          typeof item === "string" ? item : item?.name || ""
+        )
+        .join(" ")
+    );
 
-      });
+    // Match the student's skills against explicit job requirements
+    // first. If no requirements exist, use the job's text and tags.
+    const matchedSkills = userSkills
+      .filter((skill) => {
+        const normalized = normalizeSkill(skill.name);
 
-      setJobs(data.matches || []);
+        if (uniqueRequired.length > 0) {
+          return uniqueRequired.some(
+            (required) =>
+              normalizeSkill(required) === normalized
+          );
+        }
 
-      setJobPage(page);
+        return (
+          normalized.length > 0 &&
+          searchableText.includes(normalized)
+        );
+      })
+      .map((skill) => skill.name);
 
-    } catch (err) {
+    const matchedSet = new Set(
+      matchedSkills.map(normalizeSkill)
+    );
 
-      setJobsError(
+    const missingSkills = uniqueRequired.filter(
+      (skill) => !matchedSet.has(normalizeSkill(skill))
+    );
 
-        err.response?.data?.message ||
+    let matchScore = 0;
 
-          "Unable to fetch job matches. Please try again."
-
+    if (uniqueRequired.length > 0) {
+      // Score the job against its explicit requirements.
+      matchScore = Math.round(
+        ((uniqueRequired.length - missingSkills.length) /
+          uniqueRequired.length) *
+          100
       );
-
-    } finally {
-
-      setJobsLoading(false);
-
+    } else if (userSkills.length > 0) {
+      // When requirements are absent, use skill coverage in the
+      // available job text instead.
+      matchScore = Math.round(
+        (matchedSkills.length / userSkills.length) * 100
+      );
     }
 
-  }, []);
+    // Skill evidence is supporting context, not a replacement
+    // for the actual skill match.
+    const evidenceStrength =
+      matchedSkills.length === 0
+        ? 0
+        : Math.round(
+            (userSkills
+              .filter((skill) =>
+                matchedSet.has(normalizeSkill(skill.name))
+              )
+              .reduce(
+                (sum, skill) =>
+                  sum +
+                  (skill.evidenceCount > 0 ? 1 : 0),
+                0
+              ) /
+              matchedSkills.length) *
+              100
+          );
+
+    return {
+      matchScore,
+      matchedSkills,
+      missingSkills,
+      evidenceStrength,
+      explanation:
+        matchedSkills.length > 0
+          ? `Your profile matches ${matchedSkills.length} skill(s) for this job.`
+          : "No matching skills were detected in the available job information.",
+    };
+  };
+
+  const loadJobs = useCallback(
+    async (page = 1) => {
+      setJobsLoading(true);
+      setJobsError("");
+
+      try {
+        // Fetch recent jobs from the backend.
+        const { data } = await api.get("/jobs/recent", {
+          params: { limit: 100 },
+        });
+
+        const receivedJobs = Array.isArray(data.jobs)
+          ? data.jobs
+          : Array.isArray(data.data)
+            ? data.data
+            : [];
+
+        // The student profile is loaded from /student/profile.
+        // Recalculate matches using the current student's skills.
+        const studentSkills = studentProfile?.skills || [];
+
+        const rankedJobs = receivedJobs
+          .filter((job) => job && job.active !== false)
+          .map((job) => ({
+            job,
+            match: getJobMatch(job, studentSkills),
+          }))
+          .sort(
+            (a, b) =>
+              b.match.matchScore - a.match.matchScore ||
+              new Date(b.job.postedAt || 0).getTime() -
+                new Date(a.job.postedAt || 0).getTime()
+          );
+
+        setJobs(rankedJobs);
+        setJobPage(page);
+      } catch (err) {
+        console.error("Failed to load matching jobs:", err);
+
+        setJobsError(
+          err.response?.data?.message ||
+            "Unable to fetch recent jobs. Please try again."
+        );
+      } finally {
+        setJobsLoading(false);
+      }
+    },
+    [studentProfile?.skills]
+  );
 
   useEffect(() => {
-
-    if (activeTab === "jobs" && jobs.length === 0 && !jobsError) {
-
+    if (
+      activeTab === "jobs" &&
+      studentProfile &&
+      jobs.length === 0 &&
+      !jobsLoading &&
+      !jobsError
+    ) {
       loadJobs(1);
-
     }
-
-  }, [activeTab, jobs.length, jobsError, loadJobs]);
+  }, [
+    activeTab,
+    studentProfile,
+    jobs.length,
+    jobsLoading,
+    jobsError,
+    loadJobs,
+  ]);
 
   const filteredJobs = useMemo(() => {
-
     const query = jobQuery.toLowerCase().trim();
 
     if (!query) return jobs;
 
-    return jobs.filter(({ job }) =>
-
+    return jobs.filter(({ job, match }) =>
       [
-
         job.title,
-
         job.company,
-
         job.location,
-
+        job.description,
         ...(job.tags || []),
-
         ...(job.requiredSkills || []),
-
+        ...(match.matchedSkills || []),
       ]
-
+        .map((item) =>
+          typeof item === "string" ? item : item?.name || ""
+        )
         .join(" ")
-
         .toLowerCase()
-
         .includes(query)
-
     );
-
   }, [jobs, jobQuery]);
 
+  // Client-side pagination for the fetched and ranked jobs.
+  const JOBS_PER_PAGE = 10;
+  const totalJobPages = Math.ceil(
+    filteredJobs.length / JOBS_PER_PAGE
+  );
+  const safeJobPage = Math.min(
+    jobPage,
+    Math.max(1, totalJobPages)
+  );
+
+  const paginatedJobs = filteredJobs.slice(
+    (safeJobPage - 1) * JOBS_PER_PAGE,
+    safeJobPage * JOBS_PER_PAGE
+  );
   // ---------------- Resume ----------------
 
   function updateResume(field, value) {
