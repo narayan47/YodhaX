@@ -17,10 +17,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
-const api = axios.create({
-  baseURL: "/api",
-  withCredentials: true,
-});
+import api from "../api/axios";
 
 const STATUSES = [
   "applied",

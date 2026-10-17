@@ -77,13 +77,13 @@ app.use(cookieParser());
 app.use("/api/jobs", joblitingRoutes);
 
 app.use("/api/auth", authRoutes);
+app.use("/api", applicationRoutes);
 app.use("/api/student", studentRoutes);
 app.use("/api/resume", resumeRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/jobs/sync", jobSyncRoutes);
 app.use("/api/arbeitnow", recentJobRoutes);
 app.use("/api", placementRoutes);
-app.use("/api", applicationRoutes);
 app.use("/api/placement", placementRoutes);
 app.use("/api/student", skillAssessmentRoutes);
 

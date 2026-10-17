@@ -1,3 +1,4 @@
+
 import { Router } from "express";
 import mongoose from "mongoose";
 
@@ -20,6 +21,8 @@ const STATUSES = [
   "withdrawn",
 ];
 
+const ALLOWED_ROLES = ["student", "placementcell"];
+
 function currentUserId(req) {
   return req.user?._id || req.user?.id;
 }
@@ -29,6 +32,8 @@ function validId(value) {
 }
 
 function serialize(application) {
+  if (!application) return null;
+
   const item =
     typeof application.toObject === "function"
       ? application.toObject()
@@ -76,9 +81,21 @@ function parseApplyUrl(value) {
 function parseInterviewDate(value) {
   if (value === null || value === "") return null;
 
-  const date = new Date(value);
+  if (typeof value !== "string") return undefined;
 
-  if (Number.isNaN(date.getTime())) return undefined;
+  // The frontend sends a date input in YYYY-MM-DD format.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return undefined;
+  }
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.toISOString().slice(0, 10) !== value
+  ) {
+    return undefined;
+  }
 
   return date;
 }
@@ -87,31 +104,53 @@ function isValidRole(req, role) {
   return req.user?.role === role;
 }
 
-// Students can list only their own applications.
+function sendError(res, status, message) {
+  return res.status(status).json({
+    success: false,
+    message,
+  });
+}
+
+// ----------------------------------------------------
+// GET /api/me/applications
+// Student retrieves their own applications.
+// ----------------------------------------------------
+
 router.get(
   "/me/applications",
   requireAuth,
   requireRole("student"),
   async (req, res, next) => {
     try {
+      const studentId = currentUserId(req);
+
       const applications = await JobApplication.find({
-        student: currentUserId(req),
+        student: studentId,
       })
-        .populate("student", "name fullName full_name email role")
+        .populate(
+          "student",
+          "name fullName full_name email role"
+        )
         .sort({ updatedAt: -1 })
         .lean();
 
-      return res.json({
+      return res.status(200).json({
         success: true,
+        count: applications.length,
         applications: applications.map(serialize),
       });
     } catch (error) {
-      return next(error);
+      next(error);
     }
   }
 );
 
-// Placement officers can see the pipeline across students.
+// ----------------------------------------------------
+// GET /api/placement/applications
+// Placement officer retrieves the application pipeline.
+// Optional filters: ?status=interview&studentId=...
+// ----------------------------------------------------
+
 router.get(
   "/placement/applications",
   requireAuth,
@@ -122,10 +161,11 @@ router.get(
 
       if (req.query.status && req.query.status !== "all") {
         if (!STATUSES.includes(req.query.status)) {
-          return res.status(400).json({
-            success: false,
-            message: "Invalid application status.",
-          });
+          return sendError(
+            res,
+            400,
+            "Invalid application status."
+          );
         }
 
         filter.status = req.query.status;
@@ -133,31 +173,36 @@ router.get(
 
       if (req.query.studentId) {
         if (!validId(req.query.studentId)) {
-          return res.status(400).json({
-            success: false,
-            message: "Invalid student ID.",
-          });
+          return sendError(res, 400, "Invalid student ID.");
         }
 
         filter.student = req.query.studentId;
       }
 
       const applications = await JobApplication.find(filter)
-        .populate("student", "name fullName full_name email role")
+        .populate(
+          "student",
+          "name fullName full_name email role"
+        )
         .sort({ updatedAt: -1 })
         .lean();
 
-      return res.json({
+      return res.status(200).json({
         success: true,
+        count: applications.length,
         applications: applications.map(serialize),
       });
     } catch (error) {
-      return next(error);
+      next(error);
     }
   }
 );
 
-// Students list eligible student accounts for officer assignment.
+// ----------------------------------------------------
+// GET /api/placement/students
+// Return students for the placement officer dropdown.
+// ----------------------------------------------------
+
 router.get(
   "/placement/students",
   requireAuth,
@@ -165,11 +210,11 @@ router.get(
   async (req, res, next) => {
     try {
       const students = await User.find({ role: "student" })
-        .select("name fullName full_name email role")
-        .sort({ name: 1 })
+        .select("_id name fullName full_name email role")
+        .sort({ name: 1, fullName: 1 })
         .lean();
 
-      return res.json({
+      return res.status(200).json({
         success: true,
         students: students.map((student) => ({
           id: String(student._id),
@@ -183,23 +228,45 @@ router.get(
         })),
       });
     } catch (error) {
-      return next(error);
+      next(error);
     }
   }
 );
 
-// Shared create helper. New manual entries start at "applied".
+// ----------------------------------------------------
+// Shared helper for manually creating applications.
+// ----------------------------------------------------
+
 async function createManualApplication({
   studentId,
   createdBy,
+  createdByRole,
   body,
 }) {
-  const jobTitle = String(body.jobTitle || "").trim();
-  const company = String(body.company || "").trim();
-  const applyUrl = parseApplyUrl(body.applyUrl);
+  const jobTitle =
+    typeof body.jobTitle === "string"
+      ? body.jobTitle.trim()
+      : "";
+
+  const company =
+    typeof body.company === "string"
+      ? body.company.trim()
+      : "";
+
+  const note =
+    typeof body.note === "string"
+      ? body.note.trim()
+      : "";
+
+  const rawApplyUrl =
+    typeof body.applyUrl === "string"
+      ? body.applyUrl.trim()
+      : "";
 
   if (!jobTitle || !company) {
-    const error = new Error("Job title and company are required.");
+    const error = new Error(
+      "Job title and company are required."
+    );
     error.status = 400;
     throw error;
   }
@@ -212,7 +279,23 @@ async function createManualApplication({
     throw error;
   }
 
-  if (body.applyUrl && applyUrl === null) {
+  if (note.length > 1000) {
+    const error = new Error(
+      "Note must be 1000 characters or fewer."
+    );
+    error.status = 400;
+    throw error;
+  }
+
+  if (rawApplyUrl.length > 2048) {
+    const error = new Error("Application URL is too long.");
+    error.status = 400;
+    throw error;
+  }
+
+  const applyUrl = parseApplyUrl(rawApplyUrl);
+
+  if (rawApplyUrl && applyUrl === null) {
     const error = new Error(
       "Apply URL must be a valid HTTP or HTTPS URL."
     );
@@ -232,7 +315,7 @@ async function createManualApplication({
   }
 
   const application = await JobApplication.create({
-    student: studentId,
+    student: student._id,
     createdBy,
     jobTitle,
     company,
@@ -244,8 +327,8 @@ async function createManualApplication({
         from: "applied",
         to: "applied",
         changedBy: createdBy,
-        changedByRole: "student",
-        note: String(body.note || "").trim(),
+        changedByRole: createdByRole,
+        note,
         changedAt: new Date(),
       },
     ],
@@ -254,21 +337,33 @@ async function createManualApplication({
   return application;
 }
 
-// Student manually records a job applied for externally.
+// ----------------------------------------------------
+// POST /api/me/applications/manual
+// Student adds an external job application.
+// ----------------------------------------------------
+
 router.post(
   "/me/applications/manual",
   requireAuth,
   requireRole("student"),
   async (req, res, next) => {
     try {
+      const userId = currentUserId(req);
+
       const application = await createManualApplication({
-        studentId: currentUserId(req),
-        createdBy: currentUserId(req),
+        studentId: userId,
+        createdBy: userId,
+        createdByRole: "student",
         body: req.body || {},
       });
 
-      const result = await JobApplication.findById(application._id)
-        .populate("student", "name fullName full_name email role")
+      const result = await JobApplication.findById(
+        application._id
+      )
+        .populate(
+          "student",
+          "name fullName full_name email role"
+        )
         .lean();
 
       return res.status(201).json({
@@ -278,18 +373,19 @@ router.post(
       });
     } catch (error) {
       if (error.status) {
-        return res.status(error.status).json({
-          success: false,
-          message: error.message,
-        });
+        return sendError(res, error.status, error.message);
       }
 
-      return next(error);
+      next(error);
     }
   }
 );
 
-// Placement officer manually records an application for a student.
+// ----------------------------------------------------
+// POST /api/placement/applications/manual
+// Placement officer adds an application for a student.
+// ----------------------------------------------------
+
 router.post(
   "/placement/applications/manual",
   requireAuth,
@@ -299,20 +395,27 @@ router.post(
       const { studentId } = req.body || {};
 
       if (!validId(studentId)) {
-        return res.status(400).json({
-          success: false,
-          message: "A valid studentId is required.",
-        });
+        return sendError(
+          res,
+          400,
+          "A valid studentId is required."
+        );
       }
 
       const application = await createManualApplication({
         studentId,
         createdBy: currentUserId(req),
+        createdByRole: "placementcell",
         body: req.body || {},
       });
 
-      const result = await JobApplication.findById(application._id)
-        .populate("student", "name fullName full_name email role")
+      const result = await JobApplication.findById(
+        application._id
+      )
+        .populate(
+          "student",
+          "name fullName full_name email role"
+        )
         .lean();
 
       return res.status(201).json({
@@ -322,136 +425,133 @@ router.post(
       });
     } catch (error) {
       if (error.status) {
-        return res.status(error.status).json({
-          success: false,
-          message: error.message,
-        });
+        return sendError(res, error.status, error.message);
       }
 
-      return next(error);
+      next(error);
     }
   }
 );
 
-// Student can update their own application.
-// Placement officer can update any application.
+// ----------------------------------------------------
+// PATCH /api/applications/:id/status
+// Student updates their own record.
+// Placement officer updates any student's record.
+// ----------------------------------------------------
+
 router.patch(
   "/applications/:id/status",
   requireAuth,
+  requireRole(...ALLOWED_ROLES),
   async (req, res, next) => {
     try {
       const { id } = req.params;
 
       if (!validId(id)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid application ID.",
-        });
-      }
-
-      const role = req.user?.role;
-
-      if (!["student", "placementcell"].includes(role)) {
-        return res.status(403).json({
-          success: false,
-          message: "You cannot update this application.",
-        });
+        return sendError(res, 400, "Invalid application ID.");
       }
 
       const application = await JobApplication.findById(id);
 
       if (!application) {
-        return res.status(404).json({
-          success: false,
-          message: "Application not found.",
-        });
+        return sendError(res, 404, "Application not found.");
       }
 
-      // Never allow a student to update another student's record.
+      const role = req.user.role;
+      const userId = currentUserId(req);
+
+      // Students may only modify their own applications.
       if (
         isValidRole(req, "student") &&
-        String(application.student) !== String(currentUserId(req))
+        String(application.student) !== String(userId)
       ) {
-        return res.status(403).json({
-          success: false,
-          message: "You can update only your own applications.",
-        });
+        return sendError(
+          res,
+          403,
+          "You can update only your own applications."
+        );
       }
 
-      const { status, note, interviewDate } = req.body || {};
+      const {
+        status,
+        note,
+        interviewDate,
+      } = req.body || {};
 
       if (!STATUSES.includes(status)) {
-        return res.status(400).json({
-          success: false,
-          message: `Status must be one of: ${STATUSES.join(", ")}.`,
-        });
+        return sendError(
+          res,
+          400,
+          `Status must be one of: ${STATUSES.join(", ")}.`
+        );
       }
 
       if (
         note !== undefined &&
         (typeof note !== "string" || note.length > 1000)
       ) {
-        return res.status(400).json({
-          success: false,
-          message: "Note must be 1000 characters or fewer.",
-        });
+        return sendError(
+          res,
+          400,
+          "Note must be 1000 characters or fewer."
+        );
       }
 
-      const parsedDate =
-        interviewDate === undefined
-          ? application.interviewDate
-          : parseInterviewDate(interviewDate);
+      let parsedDate = application.interviewDate;
 
-      if (parsedDate === undefined) {
-        return res.status(400).json({
-          success: false,
-          message: "Interview date is invalid.",
-        });
-      }
+      if (interviewDate !== undefined) {
+        parsedDate = parseInterviewDate(interviewDate);
 
-      if (
-        status === "interview" &&
-        interviewDate !== undefined &&
-        interviewDate !== null &&
-        interviewDate !== "" &&
-        !parsedDate
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "Provide a valid interview date.",
-        });
+        if (parsedDate === undefined) {
+          return sendError(
+            res,
+            400,
+            "Interview date must be a valid YYYY-MM-DD date."
+          );
+        }
       }
 
       const previousStatus = application.status;
-      const nextNote = String(note || "").trim();
+      const nextNote =
+        typeof note === "string" ? note.trim() : "";
 
       application.status = status;
       application.interviewDate = parsedDate;
 
-      // Record every manual update for transparency.
-      application.statusHistory.push({
-        from: previousStatus,
-        to: status,
-        changedBy: currentUserId(req),
-        changedByRole: role,
-        note: nextNote,
-        interviewDate: parsedDate,
-        changedAt: new Date(),
-      });
+      if (note !== undefined && nextNote) {
+        application.note = nextNote;
+      }
+
+      // Keep a record of actual status changes and supplied notes.
+      if (previousStatus !== status || nextNote) {
+        application.statusHistory.push({
+          from: previousStatus,
+          to: status,
+          changedBy: userId,
+          changedByRole: role,
+          note: nextNote,
+          changedAt: new Date(),
+        });
+      }
 
       await application.save();
 
-      const result = await JobApplication.findById(application._id)
-        .populate("student", "name fullName full_name email role")
+      const result = await JobApplication.findById(
+        application._id
+      )
+        .populate(
+          "student",
+          "name fullName full_name email role"
+        )
         .lean();
 
-      return res.json({
+      return res.status(200).json({
         success: true,
         message: "Application pipeline updated.",
         application: serialize(result),
       });
     } catch (error) {
-      return next(error);
+      next(error);
     }
   }
 );
