@@ -417,9 +417,9 @@ function Home() {
             </p>
 
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Button onClick={showNotice} className="min-h-12">
+              <Link to={'login'} className="min-h-12 btn-primary flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 shadow-lg shadow-violet-500/20">
                 Build my skill profile <ArrowRight size={16} />
-              </Button>
+              </Link>
 
               <Button
                 variant="secondary"
