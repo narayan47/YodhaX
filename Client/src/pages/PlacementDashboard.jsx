@@ -905,6 +905,7 @@ export default function PlacementDashboard() {
 
                           <tbody className="divide-y divide-white/5">
                             {filteredStudents.map((student) => (
+                             
                               <tr key={student.id || student._id || student.email}>
                                 <td className="px-5 py-4">
                                   <div className="flex items-center gap-3">
@@ -1051,4 +1052,3 @@ export default function PlacementDashboard() {
     </div>
   );
 }
-  

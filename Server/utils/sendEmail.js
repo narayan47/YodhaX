@@ -1,65 +1,125 @@
 
-import nodemailer from "nodemailer";
-
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_ADDRESS,
-    pass: process.env.EMAIL_SECURITY_PASSWORD,
-  },
-});
+const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 
 export async function sendVerificationEmail(email, token) {
-  const verificationUrl = new URL(
-    "/verify-email",
-    process.env.CLIENT_URL
-  );
+  const apiKey = process.env.BREVO_API_KEY;
+  const senderEmail = process.env.BREVO_SENDER_EMAIL;
+  const senderName = process.env.BREVO_SENDER_NAME || "YodhaX";
+  const frontendUrl = process.env.CLIENT_URL;
 
-  verificationUrl.searchParams.set("token", token);
+  if (!apiKey || !senderEmail || !frontendUrl) {
+    throw new Error(
+      "Missing BREVO_API_KEY, BREVO_SENDER_EMAIL, or CLIENT_URL."
+    );
+  }
+
+  if (
+    typeof email !== "string" ||
+    typeof token !== "string" ||
+    !email.trim() ||
+    !token.trim()
+  ) {
+    throw new Error("A valid recipient email and verification token are required.");
+  }
+
+  // Remove a trailing slash from the frontend URL.
+  const baseUrl = frontendUrl.replace(/\/+$/, "");
+
+  // This URL must match your React verification route.
+  const verificationUrl =
+    `${baseUrl}/verify-email?token=${encodeURIComponent(token)}`;
+
+  const payload = {
+    sender: {
+      name: senderName,
+      email: senderEmail,
+    },
+    to: [
+      {
+        email: email.trim().toLowerCase(),
+      },
+    ],
+    subject: "Verify your YodhaX account",
+    htmlContent: `
+      <!DOCTYPE html>
+      <html lang="en">
+        <body style="font-family: Arial, sans-serif; line-height: 1.6;">
+          <h2>Welcome to YodhaX!</h2>
+
+          <p>
+            Please verify your email address to activate your account.
+          </p>
+
+          <p>
+            <a
+              href="${verificationUrl}"
+              style="
+                display: inline-block;
+                padding: 12px 20px;
+                background: #2563eb;
+                color: #ffffff;
+                text-decoration: none;
+                border-radius: 6px;
+              "
+            >
+              Verify Email Address
+            </a>
+          </p>
+
+          <p>
+            This verification link expires in 15 minutes.
+          </p>
+
+          <p>
+            If you did not create a YodhaX account, you can ignore this email.
+          </p>
+        </body>
+      </html>
+    `,
+    textContent: `
+Welcome to YodhaX!
+
+Verify your email address using this link:
+${verificationUrl}
+
+This link expires in 15 minutes.
+    `.trim(),
+  };
+
+  const response = await fetch(BREVO_API_URL, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "api-key": apiKey,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const responseText = await response.text();
+
+  let result;
 
   try {
-    const info = await transporter.sendMail({
-      from: `"Verifhir" <${process.env.EMAIL_ADDRESS}>`,
-      to: email,
-      subject: "Verify your Verifhir email address",
-      text: [
-        "Welcome to Verifhir!",
-        "",
-        "Click the link below to verify your email address:",
-        verificationUrl.toString(),
-        "",
-        "This link expires in 15 minutes.",
-        "If you did not create this account, you can ignore this email.",
-      ].join("\n"),
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:32px;color:#171727">
-          <h1 style="color:#7955e8">Welcome to Verifhir</h1>
-          <p>Verify your email address to activate your account.</p>
-          <a
-            href="${verificationUrl.toString()}"
-            style="display:inline-block;padding:14px 22px;background:#7955e8;color:white;text-decoration:none;border-radius:8px"
-          >
-            Verify my email
-          </a>
-          <p style="margin-top:24px;color:#666;font-size:13px">
-            This link expires in 15 minutes. If you did not create this account,
-            you can ignore this email.
-          </p>
-        </div>
-      `,
-    });
-
-    console.log("Verification email sent:", info.messageId);
-    return info;
-  } catch (error) {
-    console.error("Verification email failed:", {
-      code: error.code,
-      message: error.message,
-      response: error.response,
-    });
-
-    throw error;
+    result = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    result = { message: responseText };
   }
-}
 
-export default sendVerificationEmail;
+  if (!response.ok) {
+    console.error("Brevo email API error:", {
+      status: response.status,
+      message: result.message || result,
+    });
+
+    throw new Error(
+      `Brevo failed to send email (HTTP ${response.status}).`
+    );
+  }
+
+  console.log("Verification email accepted by Brevo:", {
+    messageId: result.messageId,
+  });
+
+  return result;
+}
