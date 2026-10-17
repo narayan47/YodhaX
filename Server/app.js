@@ -21,7 +21,7 @@ const app = express();
 const PORT = Number(process.env.PORT) || 5000;
 
 const allowedOrigins = (
-  process.env.CLIENT_URL || "http://localhost:5173"
+  process.env.CLIENT_URL || "https://verifhire.onrender.com"
 )
   .split(",")
   .map((value) => value.trim())

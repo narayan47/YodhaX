@@ -30,13 +30,13 @@ const verificationLimiter = rateLimit({
 
 const cookieOptions = () => ({
   httpOnly: true,
-  secure:
-    process.env.COOKIE_SECURE === "true" ||
-    process.env.NODE_ENV === "production",
-  sameSite: process.env.COOKIE_SAME_SITE || "lax",
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   path: "/",
   maxAge: 24 * 60 * 60 * 1000,
 });
+
+
 
 function createVerificationToken() {
   const rawToken = crypto.randomBytes(32).toString("hex");
