@@ -148,6 +148,37 @@ export default function StudentDashboard() {
 
   const skills = studentProfile?.skills || [];
 
+  // ATS resume only: normalize skills from the student profile without
+  // changing the existing skills logic used by the rest of the dashboard.
+  const resumeSkillsSource =
+    studentProfile?.skills ??
+    studentProfile?.studentSkills ??
+    studentProfile?.skillProfile?.skills ??
+    [];
+
+  const resumeSkills = Array.isArray(resumeSkillsSource)
+    ? resumeSkillsSource
+        .map((skill) => {
+          if (typeof skill === "string") {
+            return { name: skill.trim() };
+          }
+
+          if (!skill || typeof skill !== "object") return null;
+
+          return {
+            ...skill,
+            name: String(
+              skill.name ??
+                skill.skillName ??
+                skill.skill ??
+                skill.technology ??
+                ""
+            ).trim(),
+          };
+        })
+        .filter((skill) => skill?.name)
+    : [];
+
   const loadProfiles = useCallback(async () => {
 
     setLoading(true);
@@ -2267,6 +2298,40 @@ export default function StudentDashboard() {
 
                 </EditorCard>
 
+                {/* ATS-only addition: show the skills already gathered in the student profile. */}
+                <EditorCard title="Skills from your profile">
+                  <p className="mb-3 text-xs text-slate-500">
+                    These skills come from your saved student profile and are included in the resume preview and exported PDF. To change them, use the My Skills section.
+                  </p>
+
+                  {resumeSkills.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {resumeSkills.map((skill, index) => {
+                        const scoreValue = skill.score;
+                        const hasScore =
+                          scoreValue !== null &&
+                          scoreValue !== undefined &&
+                          scoreValue !== "" &&
+                          Number.isFinite(Number(scoreValue));
+
+                        return (
+                          <span
+                            key={skill._id || skill.name || index}
+                            className="rounded-lg border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-sm"
+                          >
+                            {skill.name}
+                            {hasScore ? ` (${Math.round(Number(scoreValue))}%)` : ""}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-amber-400">
+                      No skills were returned by the student profile API. Check the response from GET /student/profile.
+                    </p>
+                  )}
+                </EditorCard>
+
                 <EditorCard
 
                   title="Education"
@@ -2543,11 +2608,11 @@ export default function StudentDashboard() {
 
                   </ResumeSection>
 
-                  <ResumeSection title="Technical Skills">
-
-                    {skills.map((skill) => skill.name).join(", ")}
-
-                  </ResumeSection>
+                  {resumeSkills.length > 0 && (
+                    <ResumeSection title="Technical Skills">
+                      {resumeSkills.map((skill) => skill.name).join(", ")}
+                    </ResumeSection>
+                  )}
 
                   <ResumeSection title="Education">
 
@@ -2761,39 +2826,60 @@ function SectionHeading({ title, description, action }) {
 
 }
 
+
 function SkillBar({ skill }) {
+  // Prefer the saved overall score; fall back to the assessment
+  // or GitHub score if the overall score is not available.
+  const scoreFields = [
+    skill.score,
+    skill.assessmentScore,
+    skill.githubScore,
+    skill.githubEvidenceScore,
+    skill.evidenceScore,
+  ];
 
-  const score = Math.max(0, Math.min(100, Number(skill.score) || 0));
-
-  return (
-
-    <div>
-
-      <div className="mb-2 flex items-center justify-between gap-3">
-
-        <span className="truncate text-sm font-medium">{skill.name}</span>
-
-        <span className="shrink-0 text-sm text-slate-400">{score}/100</span>
-
-      </div>
-
-      <div className="h-2 overflow-hidden rounded-full bg-white/10">
-
-        <div
-
-          className="h-full rounded-full bg-violet-500"
-
-          style={{ width: `${score}%` }}
-
-        />
-
-      </div>
-
-    </div>
-
+  const rawScore = scoreFields.find(
+    (value) =>
+      value !== null &&
+      value !== undefined &&
+      value !== "" &&
+      Number.isFinite(Number(value))
   );
 
+  const score =
+    rawScore === undefined
+      ? null
+      : Math.round(Math.max(0, Math.min(100, Number(rawScore))));
+
+  return (
+    <div className="w-full">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="truncate text-sm font-medium text-white">
+          {skill.name}
+        </span>
+
+        <span className="shrink-0 text-sm font-semibold text-slate-300">
+          {score === null ? "Not assessed" : `${score}%`}
+        </span>
+      </div>
+
+      <div
+        className="h-2 w-full overflow-hidden rounded-full bg-white/10"
+        role="progressbar"
+        aria-label={`${skill.name} skill score`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={score ?? 0}
+      >
+        <div
+          className="h-full rounded-full bg-violet-500 transition-all duration-500"
+          style={{ width: `${score ?? 0}%` }}
+        />
+      </div>
+    </div>
+  );
 }
+
 
 function ChecklistItem({ done, title, description, onClick }) {
 
